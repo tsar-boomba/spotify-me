@@ -1,0 +1,30 @@
+[package]
+name = "spotify-me"
+version = "0.1.0"
+edition = "2021"
+
+# Starting in Rust 1.62 you can use `cargo add` to add dependencies 
+# to your project.
+#
+# If you're using an older Rust version,
+# download cargo-edit(https://github.com/killercup/cargo-edit#installation) 
+# to install the `add` subcommand.
+#
+# Running `cargo add DEPENDENCY_NAME` will
+# add the latest version of a dependency to the list,
+# and it will keep the alphabetic ordering for you.
+
+[dependencies]
+axum = "0.7.4"
+dotenvy = "0.15.7"
+futures-util = "0.3.30"
+lambda_http = "0.9.3"
+lambda_runtime = "0.9.2"
+rspotify = { version = "0.12.0", features = ["env-file"] }
+serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0.113"
+tokio = { version = "1", features = ["macros"] }
+tower-http = { version = "0.5.1", features = ["cors"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt"] }
+
