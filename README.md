@@ -1,3 +1,3 @@
 # Spotify Me
 
-A Spotify application that can only access one person's data (forever) using a refresh token.
+An AWS lambda service for accessing one person's data, forever, using a refresh token. Used for accessing my spotify data from my portfolio website.
