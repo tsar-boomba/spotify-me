@@ -110,7 +110,7 @@ async fn data(State(AppState { spotify }): State<AppState>) -> Result<Response, 
 
 async fn currently_playing(
     State(AppState { spotify }): State<AppState>,
-) -> Result<Json<Option<Playing>>, String> {
+) -> Result<Response, String> {
     let currently_playing = spotify
         .current_playback(None, Some([&AdditionalType::Track]))
         .await
@@ -127,19 +127,25 @@ async fn currently_playing(
                     unreachable!("Should never be playing an episode.")
                 }
             };
-            Ok(Json(Some(Playing {
+            
+            let cache_header = CacheControl::new().with_no_cache().with_no_store();
+
+            let mut res = Json(Some(Playing {
                 device: currently_playing.device,
                 context: currently_playing.context,
                 playing: full_track_to_simple(full_track),
                 progress_secs: currently_playing.progress.unwrap().num_seconds() as u32,
                 repeat: currently_playing.repeat_state,
                 shuffled: currently_playing.shuffle_state,
-            })))
+            })).into_response();
+            res.headers_mut().typed_insert(cache_header);
+
+            Ok(res)
         } else {
-            Ok(Json(None))
+            Ok(Json(None::<Playing>).into_response())
         }
     } else {
-        Ok(Json(None))
+        Ok(Json(None::<Playing>).into_response())
     }
 }
 
