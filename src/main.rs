@@ -2,18 +2,17 @@ use std::{sync::OnceLock, time::Duration};
 
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use chrono::TimeDelta;
+use chrono::{DateTime, Utc};
 use futures_util::{join, StreamExt, TryStreamExt};
 use headers::{CacheControl, HeaderMapExt};
 use lambda_http::{run, Error};
 use rspotify::{
     clients::{BaseClient, OAuthClient},
-    model::{AdditionalType, Context, Device, FullTrack, RepeatState, TimeRange},
+    model::{AdditionalType, Context, Device, FullTrack, RepeatState, TimeLimits, TimeRange},
     scopes, AuthCodeSpotify, Credentials, Token,
 };
 use serde::Serialize;
@@ -59,6 +58,14 @@ struct Playing {
     shuffled: bool,
     playing: SimpleTrack,
     progress_secs: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LastPlayed {
+    track: SimpleTrack,
+    context: Option<Context>,
+    played_at: DateTime<Utc>,
 }
 
 static DATA_CACHE: OnceLock<Data> = OnceLock::new();
@@ -127,7 +134,7 @@ async fn currently_playing(
                     unreachable!("Should never be playing an episode.")
                 }
             };
-            
+
             let cache_header = CacheControl::new().with_no_cache().with_no_store();
 
             let mut res = Json(Some(Playing {
@@ -137,7 +144,8 @@ async fn currently_playing(
                 progress_secs: currently_playing.progress.unwrap().num_seconds() as u32,
                 repeat: currently_playing.repeat_state,
                 shuffled: currently_playing.shuffle_state,
-            })).into_response();
+            }))
+            .into_response();
             res.headers_mut().typed_insert(cache_header);
 
             Ok(res)
@@ -147,6 +155,37 @@ async fn currently_playing(
     } else {
         Ok(Json(None::<Playing>).into_response())
     }
+}
+
+async fn recently_played(State(AppState { spotify }): State<AppState>) -> Result<Response, String> {
+    let mut recent = spotify
+        .current_user_recently_played(
+            Some(10),
+            Some(TimeLimits::Before(chrono::offset::Utc::now())),
+        )
+        .await
+        .map_err(|e| e.to_string())?
+        .items;
+
+    // Sort so that most recent is first
+    recent.sort_unstable_by(|a, b| b.played_at.cmp(&a.played_at));
+
+    let cache_header = CacheControl::new().with_max_age(Duration::from_secs(3 * 60));
+    let mut res = Json(
+        recent
+            .into_iter()
+            .map(|his| LastPlayed {
+                track: full_track_to_simple(his.track),
+                context: his.context,
+                played_at: his.played_at,
+            })
+            .collect::<Vec<_>>(),
+    )
+    .into_response();
+
+    res.headers_mut().typed_insert(cache_header);
+
+    Ok(res)
 }
 
 async fn top_for_time_frame(
@@ -218,6 +257,7 @@ async fn main() -> Result<(), Error> {
     let app = Router::new()
         .route("/", get(data))
         .route("/playing", get(currently_playing))
+        .route("/recent", get(recently_played))
         .layer(CorsLayer::permissive())
         .with_state(AppState { spotify });
 
